@@ -1,0 +1,11 @@
+hpack err=<nil> n=4
+hpack :method=GET
+hpack :scheme=http
+hpack :path=/
+hpack :authority=www.example.com
+largebuf len=8 u32be@1=66303 err=<nil>
+largebuf view@5="\x7fo" err=<nil>
+largebuf oob err=true
+mongo request: returned=false more=true err=<nil> cached=1
+mongo response: req=1 resp=1 start=100 end=400 more=false err=<nil> cached=1
+mongo malformed rejected=true

@@ -1,0 +1,9 @@
+project: savantenvs/opentelemetry-ebpf-instrumentation
+target: stat-parser
+testsuite:
+  - https://$MAYHEM_DOMAIN/$MAYHEM_PROJECT/$MAYHEM_TARGET/testsuite.tar
+  - file://mayhem/stat-parser/testsuite
+cmds:
+  - cmd: /mayhem/stat-parser
+    libfuzzer: true
+    timeout: 30

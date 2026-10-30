@@ -1,0 +1,9 @@
+project: savantenvs/opentelemetry-ebpf-instrumentation
+target: large-buffer
+testsuite:
+  - https://$MAYHEM_DOMAIN/$MAYHEM_PROJECT/$MAYHEM_TARGET/testsuite.tar
+  - file://mayhem/large-buffer/testsuite
+cmds:
+  - cmd: /mayhem/large-buffer
+    libfuzzer: true
+    timeout: 30

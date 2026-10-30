@@ -1,0 +1,10 @@
+package ebpfcommon
+
+func getConnInfo() BpfConnectionInfoT {
+	return BpfConnectionInfoT{
+		S_addr: [16]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 192, 168, 0, 1},
+		D_addr: [16]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 8, 8, 8, 8},
+		S_port: 27017,
+		D_port: 27017,
+	}
+}

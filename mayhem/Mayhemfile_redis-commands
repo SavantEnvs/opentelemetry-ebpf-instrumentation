@@ -1,0 +1,9 @@
+project: savantenvs/opentelemetry-ebpf-instrumentation
+target: redis-commands
+testsuite:
+  - https://$MAYHEM_DOMAIN/$MAYHEM_PROJECT/$MAYHEM_TARGET/testsuite.tar
+  - file://mayhem/redis-commands/testsuite
+cmds:
+  - cmd: /mayhem/redis-commands
+    libfuzzer: true
+    timeout: 30

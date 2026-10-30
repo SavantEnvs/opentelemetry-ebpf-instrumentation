@@ -1,0 +1,9 @@
+project: savantenvs/opentelemetry-ebpf-instrumentation
+target: http2-extract
+testsuite:
+  - https://$MAYHEM_DOMAIN/$MAYHEM_PROJECT/$MAYHEM_TARGET/testsuite.tar
+  - file://mayhem/http2-extract/testsuite
+cmds:
+  - cmd: /mayhem/http2-extract
+    libfuzzer: true
+    timeout: 30

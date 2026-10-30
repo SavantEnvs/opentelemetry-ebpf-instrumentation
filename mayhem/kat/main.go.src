@@ -1,0 +1,67 @@
+// Known-answer probe for mayhem/test.sh. The blank cgo import forces dynamic linking so the
+// sabotage shim (LD_PRELOAD _exit(0)) can neuter it, unlike a static `go test` binary.
+package main
+
+/*
+#include <stdlib.h>
+*/
+import "C"
+
+import (
+	"encoding/binary"
+	"encoding/hex"
+	"fmt"
+
+	"github.com/hashicorp/golang-lru/v2/expirable"
+
+	ebpfcommon "go.opentelemetry.io/obi/pkg/ebpf/common"
+	"go.opentelemetry.io/obi/pkg/internal/ebpf/bhpack"
+	"go.opentelemetry.io/obi/pkg/internal/largebuf"
+)
+
+func main() {
+	// RFC 7541 C.4.1: Huffman-coded request headers.
+	raw, _ := hex.DecodeString("828684418cf1e3c2e5f23a6ba0ab90f4ff")
+	fields, err := bhpack.NewDecoder(4096, nil).DecodeFull(raw)
+	fmt.Printf("hpack err=%v n=%d\n", err, len(fields))
+	for _, f := range fields {
+		fmt.Printf("hpack %s=%s\n", f.Name, f.Value)
+	}
+
+	lb := largebuf.NewLargeBuffer()
+	lb.AppendChunk([]byte{0x00, 0x00, 0x01})
+	lb.AppendChunk([]byte{0x02, 0xff, 0x7f, 'o', 'k'})
+	u32, err := lb.U32BEAt(1)
+	fmt.Printf("largebuf len=%d u32be@1=%d err=%v\n", lb.Len(), u32, err)
+	view, err := lb.UnsafeViewAt(5, 2)
+	fmt.Printf("largebuf view@5=%q err=%v\n", view, err)
+	_, err = lb.UnsafeViewAt(7, 2)
+	fmt.Printf("largebuf oob err=%v\n", err != nil)
+
+	// MongoDB OP_MSG {find: "c"} request then its response, correlated by requestID.
+	request := []byte{
+		0x26, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0xdd, 7, 0, 0,
+		0, 0, 0, 0, 0,
+		0x11, 0, 0, 0, 2, 'f', 'i', 'n', 'd', 0, 2, 0, 0, 0, 'c', 0, 0,
+	}
+	response := []byte{
+		0x26, 0, 0, 0, 8, 0, 0, 0, 7, 0, 0, 0, 0xdd, 7, 0, 0,
+		0, 0, 0, 0, 0,
+		0x11, 0, 0, 0, 1, 'o', 'k', 0, 0, 0, 0, 0, 0, 0xf0, 0x3f, 0,
+	}
+	conn := ebpfcommon.BpfConnectionInfoT{S_port: 27017, D_port: 27017}
+	cache := expirable.NewLRU[ebpfcommon.MongoRequestKey, *ebpfcommon.MongoRequestValue](4, nil, 0)
+	got, more, err := ebpfcommon.ProcessMongoEvent(request, 100, 200, conn, cache)
+	fmt.Printf("mongo request: returned=%v more=%v err=%v cached=%d\n", got != nil, more, err, cache.Len())
+	got, more, err = ebpfcommon.ProcessMongoEvent(response, 300, 400, conn, cache)
+	if got != nil {
+		fmt.Printf("mongo response: req=%d resp=%d start=%d end=%d more=%v err=%v cached=%d\n",
+			len(got.RequestSections), len(got.ResponseSections), got.StartTime, got.EndTime, more, err, cache.Len())
+	} else {
+		fmt.Printf("mongo response: nil more=%v err=%v cached=%d\n", more, err, cache.Len())
+	}
+	bad := append([]byte(nil), request...)
+	binary.LittleEndian.PutUint32(bad[21:25], 0xffffffff)
+	_, _, err = ebpfcommon.ProcessMongoEvent(bad, 1, 2, conn, cache)
+	fmt.Printf("mongo malformed rejected=%v\n", err != nil)
+}

@@ -1,0 +1,44 @@
+package ebpfcommon
+
+import (
+	"testing"
+
+	"go.opentelemetry.io/obi/pkg/internal/largebuf"
+)
+
+func mayhemRedisTCPEvent(direction uint8) *TCPRequestInfo {
+	i := &TCPRequestInfo{
+		StartMonotimeNs: 2000 * 1000000,
+		EndMonotimeNs:   2000 * 2 * 1000000,
+		Direction:       direction,
+	}
+	i.ConnInfo.S_addr[15] = 1
+	i.ConnInfo.S_port = 51234
+	i.ConnInfo.D_addr[15] = 2
+	i.ConnInfo.D_port = 6379
+	return i
+}
+
+func FuzzMayhemParseRedisCommands(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		for _, cmd := range parseRedisCommands(data) {
+			if cmd.op == "" {
+				t.Fatalf("command with empty op from %q", data)
+			}
+		}
+		parseRedisReplies(data, 32)
+	})
+}
+
+// The parse context starts a goroutine per expirable cache, so it is created once, not per input.
+var mayhemRedisCtx *EBPFParseContext
+
+func init() { mayhemRedisCtx = NewEBPFParseContext(nil, nil, nil) }
+
+func FuzzMayhemMatchRedis(f *testing.F) {
+	f.Fuzz(func(_ *testing.T, req, resp []byte) {
+		ctx := mayhemRedisCtx
+		event := mayhemRedisTCPEvent(directionSend)
+		_, _, _, _ = matchRedis(ctx, event, largebuf.NewLargeBufferFrom(req), largebuf.NewLargeBufferFrom(resp))
+	})
+}

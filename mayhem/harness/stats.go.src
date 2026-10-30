@@ -1,0 +1,19 @@
+package stats
+
+import (
+	"testing"
+
+	"go.opentelemetry.io/obi/pkg/ebpf/ringbuf"
+)
+
+func FuzzMayhemParseStat(f *testing.F) {
+	f.Fuzz(func(t *testing.T, raw []byte) {
+		got, _, err := parseStat(&ringbuf.Record{RawSample: raw})
+		if err != nil && got != nil {
+			t.Fatalf("parseStat returned a stat together with error %v", err)
+		}
+		if err == nil && got == nil {
+			t.Fatalf("parseStat returned neither a stat nor an error")
+		}
+	})
+}

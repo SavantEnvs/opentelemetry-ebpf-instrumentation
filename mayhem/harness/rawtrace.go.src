@@ -1,0 +1,84 @@
+package ebpfcommon
+
+import (
+	"bytes"
+	"testing"
+	"unsafe"
+
+	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/hashicorp/golang-lru/v2/expirable"
+	"github.com/hashicorp/golang-lru/v2/simplelru"
+
+	"go.opentelemetry.io/obi/pkg/appolly/app/request"
+	"go.opentelemetry.io/obi/pkg/config"
+	"go.opentelemetry.io/obi/pkg/ebpf/common/dnsparser"
+	"go.opentelemetry.io/obi/pkg/ebpf/ringbuf"
+	"go.opentelemetry.io/obi/pkg/internal/ebpf/kafkaparser"
+	"go.opentelemetry.io/obi/pkg/internal/largebuf"
+)
+
+const (
+	mayhemMaxTraceRecordSize = goAutoSpanJSONMaxLen + int(unsafe.Offsetof(GoAutoSpanTrace{}.Buf))
+	mayhemParseCacheSize     = 1
+)
+
+func mayhemTestLRU[K comparable, V any]() *simplelru.LRU[K, V] {
+	cache, err := simplelru.NewLRU[K, V](mayhemParseCacheSize, nil)
+	if err != nil {
+		panic(err)
+	}
+	return cache
+}
+
+func mayhemDispatchTraceRecord(raw []byte) (request.Span, bool, error) {
+	h2c, _ := lru.New[uint64, *h2Connection](mayhemParseCacheSize)
+	parseCtx := &EBPFParseContext{
+		h2c:                        h2c,
+		redisDBCache:               mayhemTestLRU[BpfConnectionInfoT, int](),
+		couchbaseBucketCache:       mayhemTestLRU[BpfConnectionInfoT, CouchbaseBucketInfo](),
+		largeBuffers:               expirable.NewLRU[largeBufferKey, *largebuf.LargeBuffer](mayhemParseCacheSize, nil, 0),
+		mongoRequestCache:          expirable.NewLRU[MongoRequestKey, *MongoRequestValue](mayhemParseCacheSize, nil, 0),
+		mysqlPreparedStatements:    mayhemTestLRU[mysqlPreparedStatementsKey, string](),
+		postgresPreparedStatements: mayhemTestLRU[postgresPreparedStatementsKey, postgresPreparedStatement](),
+		postgresPortals:            mayhemTestLRU[postgresPortalsKey, string](),
+		postgresNamespaces:         mayhemTestLRU[BpfConnectionInfoT, postgresNamespace](),
+		mssqlPreparedStatements:    mayhemTestLRU[mssqlPreparedStatementsKey, string](),
+		kafkaTopicUUIDToName:       mayhemTestLRU[kafkaparser.UUID, string](),
+		dnsEvents:                  expirable.NewLRU[dnsparser.DNSId, *request.Span](mayhemParseCacheSize, nil, 0),
+		pendingSpanLinks: &pendingSpanLinks{
+			cache:          expirable.NewLRU[spanLinkKey, []request.SpanLink](maxPendingSpanLinks, nil, 0),
+			linkCountLimit: maxPendingSpanLinks,
+		},
+	}
+	defer parseCtx.Close()
+	return ReadBPFTraceAsSpan(parseCtx, &config.EBPFTracer{}, &ringbuf.Record{RawSample: bytes.Clone(raw)}, &IdentityPidsFilter{})
+}
+
+func mayhemErrorText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
+func init() {
+	go func() {
+		for range MisclassifiedEvents {
+		}
+	}()
+}
+
+func FuzzMayhemReadBPFTraceAsSpan(f *testing.F) {
+	f.Fuzz(func(t *testing.T, raw []byte) {
+		if len(raw) > mayhemMaxTraceRecordSize {
+			raw = raw[:mayhemMaxTraceRecordSize]
+		}
+
+		_, ignore, err := mayhemDispatchTraceRecord(raw)
+		_, ignoreAgain, errAgain := mayhemDispatchTraceRecord(raw)
+		if ignore != ignoreAgain || mayhemErrorText(err) != mayhemErrorText(errAgain) {
+			t.Fatalf("unstable classification: first (%v, %v), second (%v, %v)",
+				ignore, err, ignoreAgain, errAgain)
+		}
+	})
+}

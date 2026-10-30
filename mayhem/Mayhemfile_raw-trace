@@ -1,0 +1,9 @@
+project: savantenvs/opentelemetry-ebpf-instrumentation
+target: raw-trace
+testsuite:
+  - https://$MAYHEM_DOMAIN/$MAYHEM_PROJECT/$MAYHEM_TARGET/testsuite.tar
+  - file://mayhem/raw-trace/testsuite
+cmds:
+  - cmd: /mayhem/raw-trace
+    libfuzzer: true
+    timeout: 30

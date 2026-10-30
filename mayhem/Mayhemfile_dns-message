@@ -1,0 +1,9 @@
+project: savantenvs/opentelemetry-ebpf-instrumentation
+target: dns-message
+testsuite:
+  - https://$MAYHEM_DOMAIN/$MAYHEM_PROJECT/$MAYHEM_TARGET/testsuite.tar
+  - file://mayhem/dns-message/testsuite
+cmds:
+  - cmd: /mayhem/dns-message
+    libfuzzer: true
+    timeout: 30

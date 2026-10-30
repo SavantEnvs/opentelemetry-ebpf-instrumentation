@@ -1,0 +1,13 @@
+package ebpfcommon
+
+import (
+	"testing"
+
+	"go.opentelemetry.io/obi/pkg/internal/largebuf"
+)
+
+func FuzzMayhemExtractHTTP2(f *testing.F) {
+	f.Fuzz(func(_ *testing.T, payload []byte) {
+		extractHTTP2(largebuf.NewLargeBufferFrom(payload))
+	})
+}

@@ -1,0 +1,9 @@
+project: savantenvs/opentelemetry-ebpf-instrumentation
+target: hpack-decoder
+testsuite:
+  - https://$MAYHEM_DOMAIN/$MAYHEM_PROJECT/$MAYHEM_TARGET/testsuite.tar
+  - file://mayhem/hpack-decoder/testsuite
+cmds:
+  - cmd: /mayhem/hpack-decoder
+    libfuzzer: true
+    timeout: 30
